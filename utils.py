@@ -14,6 +14,15 @@ def l2_regularizer(weight_decay):
         return 0.5 * weight_decay * l2
     return regularizer
 
+def learning_rate_schedule(base_lr, epoch, total_epochs):
+    alpha = epoch / total_epochs
+    if alpha <= 0.5:
+        factor = 1.0
+    elif alpha <= 0.9:
+        factor = 1.0 - (alpha - 0.5) / 0.4 * 0.99
+    else:
+        factor = 0.01
+    return factor * base_lr
 
 def cyclic_learning_rate(epoch, cycle, alpha_1, alpha_2):
     def schedule(iter):
@@ -30,6 +39,10 @@ def adjust_learning_rate(optimizer, lr):
         param_group['lr'] = lr
     return lr
 
+def clip_gradient(model, clip_value):
+    params = list(filter(lambda p: p.grad is not None, model.parameters()))
+    for p in params:
+        p.grad.data.clamp_(-clip_value, clip_value)
 
 def save_checkpoint(dir, epoch, name='checkpoint', **kwargs):
     state = {
