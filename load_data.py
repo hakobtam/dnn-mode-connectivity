@@ -5,6 +5,7 @@ from torch.nn import functional as F
 import numpy as np
 from torchtext import data
 from torchtext import datasets
+from torchtext.data import TabularDataset
 from torchtext.vocab import Vectors, GloVe
 
 def load_dataset(test_sen=None):
@@ -27,7 +28,12 @@ def load_dataset(test_sen=None):
     tokenize = lambda x: x.split()
     TEXT = data.Field(sequential=True, tokenize=tokenize, lower=True, include_lengths=True, batch_first=True, fix_length=200)
     LABEL = data.LabelField(tensor_type=torch.FloatTensor)
-    train_data, test_data = datasets.IMDB.splits(TEXT, LABEL)
+    train_data, test_data = TabularDataset.splits(
+                               path="./data/ag_news_csv", # the root directory where the data lies
+                               train='preprocessed_train.csv', test="preprocessed_test.csv",
+                               format='csv',
+                               skip_header=True, # if your csv header has a header, make sure to pass this to ensure it doesn't get proceesed as data!
+                               fields=datafields)
     TEXT.build_vocab(train_data, vectors=GloVe(name='6B', dim=300))
     LABEL.build_vocab(train_data)
 
