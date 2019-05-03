@@ -9,6 +9,7 @@ from torch.nn import Module, Parameter
 from torch.nn.modules.utils import _pair
 from torch.nn.utils.rnn import PackedSequence
 from scipy.special import binom
+from torch._jit_internal import weak_module, weak_script, weak_script_method
 
 
 class Bezier(Module):
@@ -493,6 +494,86 @@ class LSTM(CurveModule):
     @property
     def all_weights(self):
         return [[getattr(self, weight) for weight in weights] for weights in self._all_weights]
+
+[docs]@weak_module
+class Embedding(CurveModule):
+    __constants__ = ['num_embeddings', 'embedding_dim', 'padding_idx', 'max_norm',
+                     'norm_type', 'scale_grad_by_freq', 'sparse', '_weight']
+
+    def __init__(self, num_embeddings, embedding_dim, fix_points, padding_idx=None,
+                 max_norm=None, norm_type=2., scale_grad_by_freq=False,
+                 sparse=False, _weight=None):
+        super(Embedding, self).__init__(fix_points, ('weight'))
+        self.num_embeddings = num_embeddings
+        self.embedding_dim = embedding_dim
+        if padding_idx is not None:
+            if padding_idx > 0:
+                assert padding_idx < self.num_embeddings, 'Padding_idx must be within num_embeddings'
+            elif padding_idx < 0:
+                assert padding_idx >= -self.num_embeddings, 'Padding_idx must be within num_embeddings'
+                padding_idx = self.num_embeddings + padding_idx
+        self.padding_idx = padding_idx
+        self.max_norm = max_norm
+        self.norm_type = norm_type
+        self.scale_grad_by_freq = scale_grad_by_freq
+        if _weight is None:
+            for i, fixed in enumerate(self.fix_points):
+                self.register_parameter(
+                    'weight_%d' % i,
+                    Parameter(torch.Tensor(num_embeddings, embedding_dim), requires_grad=not fixed)
+                )
+            self.reset_parameters()
+        else:
+            assert list(_weight.shape) == [num_embeddings, embedding_dim], \
+                'Shape of weight does not match num_embeddings and embedding_dim'
+            for i, fixed in enumerate(self.fix_points):
+                self.register_parameter(
+                    'weight_%d' % i,
+                    Parameter(_weight, requires_grad=not fixed)
+                )
+        self.sparse = sparse
+
+    def reset_parameters(self):
+        for i in range(self.num_bends):
+            getattr(self, 'weight_%d' % i).data.normal_()
+        if self.padding_idx is not None:
+            with torch.no_grad():
+                for i in range(self.num_bends):
+                    getattr(self, 'weight_%d' % i)[self.padding_idx].fill_(0)
+
+    @weak_script_method
+    def forward(self, input, coeffs_t):
+        return F.embedding(
+            input, self.compute_weights_t(coeffs_t), self.padding_idx, self.max_norm,
+            self.norm_type, self.scale_grad_by_freq, self.sparse)
+
+    def extra_repr(self):
+        s = '{num_embeddings}, {embedding_dim}'
+        if self.padding_idx is not None:
+            s += ', padding_idx={padding_idx}'
+        if self.max_norm is not None:
+            s += ', max_norm={max_norm}'
+        if self.norm_type != 2:
+            s += ', norm_type={norm_type}'
+        if self.scale_grad_by_freq is not False:
+            s += ', scale_grad_by_freq={scale_grad_by_freq}'
+        if self.sparse is not False:
+            s += ', sparse=True'
+        return s.format(**self.__dict__)
+
+[docs]    @classmethod
+    def from_pretrained(cls, embeddings, freeze=True, sparse=False):
+        assert embeddings.dim() == 2, \
+            'Embeddings parameter is expected to be 2-dimensional'
+        rows, cols = embeddings.shape
+        embedding = cls(
+            num_embeddings=rows,
+            embedding_dim=cols,
+            _weight=embeddings,
+            sparse=sparse,
+        )
+        embedding.weight.requires_grad = not freeze
+        return embedding
 
 
 

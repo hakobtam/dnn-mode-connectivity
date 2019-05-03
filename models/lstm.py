@@ -83,8 +83,12 @@ class LSTMClassifierCurve(nn.Module):
 		self.vocab_size = vocab_size
 		self.embedding_length = embedding_length
 		
-		self.word_embeddings = nn.Embedding(vocab_size, embedding_length)# Initializing the look-up table.
-		self.word_embeddings.weight = nn.Parameter(weights, requires_grad=False) # Assigning the look-up table to the pre-trained GloVe word embedding.
+		self.word_embeddings = curves.Embedding(vocab_size, embedding_length)# Initializing the look-up table.
+		for i in len(fix_points):
+			self.word_embeddings.register_parameter(
+				'weight_%d' % i,
+				nn.Parameter(weights, requires_grad=False)
+			) # Assigning the look-up table to the pre-trained GloVe word embedding.
 		self.lstm = curves.LSTM(embedding_length, hidden_size, fix_points=fix_points)
 		self.label = curves.Linear(hidden_size, num_classes, fix_points=fix_points)
 		
