@@ -12,8 +12,8 @@ import utils
 
 parser = argparse.ArgumentParser(description='Connect models with polychain')
 
-parser.add_argument('--dir', type=str, default='/tmp/chain/', metavar='DIR',
-                    help='training directory (default: /tmp/chain)')
+parser.add_argument('--dir', type=str, default='./chain/', metavar='DIR',
+                    help='training directory (default: ./chain)')
 
 parser.add_argument('--num_points', type=int, default=6, metavar='N',
                     help='number of points between models (default: 6)')

@@ -7,7 +7,7 @@ import torch
 import torch.nn.functional as F
 from torch.nn import Module, Parameter
 from torch.nn.modules.utils import _pair
-from torch.nn.modules.utils.rnn import PackedSequence
+from torch.nn.utils.rnn import PackedSequence
 from scipy.special import binom
 
 
@@ -480,7 +480,7 @@ class LSTM(CurveModule):
                     param_names += ['weight_ih_l{}{}_{}'.format(layer, suffix, i)]
                 for i in range(len(self.fix_points)):
                     param_names += ['weight_hh_l{}{}_{}'.format(layer, suffix, i)]
-                if bias:
+                if self.bias:
                     for i in range(len(self.fix_points)):
                         param_names += ['bias_ih_l{}{}_{}'.format(layer, suffix, i)]
                     for i in range(len(self.fix_points)):
@@ -517,6 +517,8 @@ class CurveNet(Module):
 
     def import_base_parameters(self, base_model, index):
         parameters = list(self.net.parameters())[index::self.num_bends]
+        from IPython.core.debugger import set_trace
+        set_trace()
         base_parameters = base_model.parameters()
         for parameter, base_parameter in zip(parameters, base_parameters):
             parameter.data.copy_(base_parameter.data)

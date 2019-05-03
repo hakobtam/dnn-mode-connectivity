@@ -3,10 +3,11 @@ import torch.nn as nn
 from torch.autograd import Variable
 from torch.nn import functional as F
 
+import curves
 
 class LSTMClassifierBase(nn.Module):
 	def __init__(self, batch_size, num_classes, hidden_size, vocab_size, embedding_length, weights):
-		super(LSTMClassifier, self).__init__()
+		super(LSTMClassifierBase, self).__init__()
 		
 		"""
 		Arguments
@@ -62,7 +63,7 @@ class LSTMClassifierBase(nn.Module):
 
 class LSTMClassifierCurve(nn.Module):
 	def __init__(self, batch_size, num_classes, hidden_size, vocab_size, embedding_length, weights, fix_points):
-		super(LSTMClassifier, self).__init__()
+		super(LSTMClassifierCurve, self).__init__()
 		
 		"""
 		Arguments
@@ -84,8 +85,8 @@ class LSTMClassifierCurve(nn.Module):
 		
 		self.word_embeddings = nn.Embedding(vocab_size, embedding_length)# Initializing the look-up table.
 		self.word_embeddings.weight = nn.Parameter(weights, requires_grad=False) # Assigning the look-up table to the pre-trained GloVe word embedding.
-		self.lstm = curve.LSTM(embedding_length, hidden_size, fix_points=fix_points)
-		self.label = curve.Linear(hidden_size, num_classes, fix_points=fix_points)
+		self.lstm = curves.LSTM(embedding_length, hidden_size, fix_points=fix_points)
+		self.label = curves.Linear(hidden_size, num_classes, fix_points=fix_points)
 		
 	def forward(self, input_sentence, coeffs_t, batch_size=None):
 	

@@ -2,7 +2,7 @@ import numpy as np
 import os
 import torch
 import torch.nn.functional as F
-
+from tqdm import tqdm_notebook as tqdm
 import curves
 
 
@@ -52,7 +52,85 @@ def save_checkpoint(dir, epoch, name='checkpoint', **kwargs):
     filepath = os.path.join(dir, '%s-%d.pt' % (name, epoch))
     torch.save(state, filepath)
 
+def train_model(train_loader, model, optimizer, loss_fn, epoch, batch_size=32, regularizer=None):
+    total_epoch_loss = 0
+    total_epoch_acc = 0
+    model.cuda()
+    
+    steps = 0
+    model.train()
+    pbar = tqdm(enumerate(train_loader), total=len(train_loader))
+    for i, batch in pbar:
+        text = batch.text[0]
+        target = batch.label
+        target = torch.autograd.Variable(target).long()
+        if torch.cuda.is_available():
+            text = text.cuda()
+            target = target.cuda()
+        if (text.size()[0] is not batch_size):# One of the batch returned by BucketIterator has length different than batch_size.
+            continue
+            
+        optimizer.zero_grad()
+        prediction = model(text)
+        loss = loss_fn(prediction, target)
+        if regularizer is not None:
+            loss += regularizer(model)
 
+        num_corrects = (torch.max(prediction, 1)[1].view(target.size()).data == target.data).float().sum()
+        acc = 100.0 * num_corrects/len(batch)
+        
+        loss.backward()
+        utils.clip_gradient(model, 1e-2)
+        optimizer.step()
+        
+        total_epoch_loss += loss.item()
+        total_epoch_acc += acc.item()
+        pbar.set_description_str('[TRAIN] Epoch: {}, Train Loss: {:.4f}, Train acc: {:.2f}%'\
+            .format(epoch,
+                   total_epoch_loss / (i + 1),
+                   total_epoch_acc / (i + 1)))
+    
+    return {
+        'loss': total_epoch_loss/len(train_loader),
+        'acc': total_epoch_acc/len(train_loader)
+    }
+
+def eval_model(val_loader, model, loss_fn, batch_size=32, regularizer=None):
+    total_epoch_loss = 0
+    total_epoch_nll = 0
+    total_epoch_acc = 0
+    
+    model.eval()
+    with torch.no_grad():
+        for idx, batch in tqdm(enumerate(val_loader), total=len(val_loader)):
+            text = batch.text[0]
+            if (text.size()[0] is not batch_size):
+                continue
+                
+            target = batch.label
+            target = torch.autograd.Variable(target).long()
+            if torch.cuda.is_available():
+                text = text.cuda()
+                target = target.cuda()
+            prediction = model(text)
+            
+            nll = loss_fn(prediction, target)
+            loss = nll.clone()
+            if regularizer is not None:
+                loss += regularizer(model)
+                
+            num_corrects = (torch.max(prediction, 1)[1].view(target.size()).data == target.data).sum()
+            acc = 100.0 * num_corrects/len(batch)
+            total_epoch_loss += loss.item()
+            total_epoch_nll += nll.item()
+            total_epoch_acc += acc.item()
+
+    return {
+        'nll': total_epoch_nll/len(val_loader),
+        'loss': total_epoch_loss/len(val_loader),
+        'acc': total_epoch_acc/len(val_loader)
+    }
+    
 def train(train_loader, model, optimizer, criterion, regularizer=None, lr_schedule=None):
     loss_sum = 0.0
     correct = 0.0
