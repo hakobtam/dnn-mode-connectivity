@@ -54,6 +54,7 @@ def save_checkpoint(dir, epoch, name='checkpoint', **kwargs):
 
 def train_model(train_loader, model, optimizer, loss_fn, epoch, batch_size=32, regularizer=None):
     total_epoch_loss = 0
+    total_epoch_nll = 0
     total_epoch_acc = 0
     model.cuda()
     
@@ -73,6 +74,7 @@ def train_model(train_loader, model, optimizer, loss_fn, epoch, batch_size=32, r
         optimizer.zero_grad()
         prediction = model(text)
         loss = loss_fn(prediction, target)
+        nll = loss.clone()
         if regularizer is not None:
             loss += regularizer(model)
 
@@ -80,10 +82,11 @@ def train_model(train_loader, model, optimizer, loss_fn, epoch, batch_size=32, r
         acc = 100.0 * num_corrects/len(batch)
         
         loss.backward()
-        utils.clip_gradient(model, 1e-2)
+        clip_gradient(model, 1e-2)
         optimizer.step()
         
         total_epoch_loss += loss.item()
+        total_epoch_nll += nll.item()
         total_epoch_acc += acc.item()
         pbar.set_description_str('[TRAIN] Epoch: {}, Train Loss: {:.4f}, Train acc: {:.2f}%'\
             .format(epoch,
@@ -92,10 +95,11 @@ def train_model(train_loader, model, optimizer, loss_fn, epoch, batch_size=32, r
     
     return {
         'loss': total_epoch_loss/len(train_loader),
+        'nll': total_epoch_nll/len(train_loader),
         'acc': total_epoch_acc/len(train_loader)
     }
 
-def eval_model(val_loader, model, loss_fn, batch_size=32, regularizer=None):
+def eval_model(val_loader, model, loss_fn, batch_size=32, regularizer=None, **kwargs):
     total_epoch_loss = 0
     total_epoch_nll = 0
     total_epoch_acc = 0
@@ -112,7 +116,7 @@ def eval_model(val_loader, model, loss_fn, batch_size=32, regularizer=None):
             if torch.cuda.is_available():
                 text = text.cuda()
                 target = target.cuda()
-            prediction = model(text)
+            prediction = model(text, **kwargs)
             
             nll = loss_fn(prediction, target)
             loss = nll.clone()

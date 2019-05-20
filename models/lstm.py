@@ -83,8 +83,8 @@ class LSTMClassifierCurve(nn.Module):
 		self.vocab_size = vocab_size
 		self.embedding_length = embedding_length
 		
-		self.word_embeddings = curves.Embedding(vocab_size, embedding_length)# Initializing the look-up table.
-		for i in len(fix_points):
+		self.word_embeddings = curves.Embedding(vocab_size, embedding_length, fix_points=fix_points)# Initializing the look-up table.
+		for i in range(len(fix_points)):
 			self.word_embeddings.register_parameter(
 				'weight_%d' % i,
 				nn.Parameter(weights, requires_grad=False)
@@ -108,7 +108,7 @@ class LSTMClassifierCurve(nn.Module):
 		"""
 		
 		''' Here we will map all the indexes present in the input sequence to the corresponding word vector using our pre-trained word_embedddins.'''
-		input = self.word_embeddings(input_sentence) # embedded input of shape = (batch_size, num_sequences,  embedding_length)
+		input = self.word_embeddings(input_sentence, coeffs_t=coeffs_t) # embedded input of shape = (batch_size, num_sequences,  embedding_length)
 		input = input.permute(1, 0, 2) # input.size() = (num_sequences, batch_size, embedding_length)
 		if batch_size is None:
 			h_0 = Variable(torch.zeros(1, self.batch_size, self.hidden_size).cuda()) # Initial hidden state of the LSTM

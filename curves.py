@@ -373,6 +373,8 @@ class LSTM(CurveModule):
             with torch.no_grad():
                 # NB: this is an INPLACE function on all_weights, that's why the
                 # no_grad() is necessary.
+                import pdb
+                pdb.set_trace()
                 torch._cudnn_rnn_flatten_weight(
                     all_weights, (4 * self.num_bends if self.bias else 2 * self.num_bends),
                     self.input_size, rnn.get_cudnn_mode('LSTM'), self.hidden_size, self.num_layers,
@@ -380,7 +382,7 @@ class LSTM(CurveModule):
 
     def _apply(self, fn):
         ret = super(LSTM, self)._apply(fn)
-        self.flatten_parameters()
+        #self.flatten_parameters()
         return ret
 
     def reset_parameters(self):
@@ -495,15 +497,15 @@ class LSTM(CurveModule):
     def all_weights(self):
         return [[getattr(self, weight) for weight in weights] for weights in self._all_weights]
 
-[docs]@weak_module
+@weak_module
 class Embedding(CurveModule):
     __constants__ = ['num_embeddings', 'embedding_dim', 'padding_idx', 'max_norm',
                      'norm_type', 'scale_grad_by_freq', 'sparse', '_weight']
 
     def __init__(self, num_embeddings, embedding_dim, fix_points, padding_idx=None,
                  max_norm=None, norm_type=2., scale_grad_by_freq=False,
-                 sparse=False, _weight=None):
-        super(Embedding, self).__init__(fix_points, ('weight'))
+                 sparse=False):
+        super(Embedding, self).__init__(fix_points, ['weight'])
         self.num_embeddings = num_embeddings
         self.embedding_dim = embedding_dim
         if padding_idx is not None:
@@ -516,21 +518,21 @@ class Embedding(CurveModule):
         self.max_norm = max_norm
         self.norm_type = norm_type
         self.scale_grad_by_freq = scale_grad_by_freq
-        if _weight is None:
-            for i, fixed in enumerate(self.fix_points):
-                self.register_parameter(
-                    'weight_%d' % i,
-                    Parameter(torch.Tensor(num_embeddings, embedding_dim), requires_grad=not fixed)
-                )
-            self.reset_parameters()
-        else:
-            assert list(_weight.shape) == [num_embeddings, embedding_dim], \
-                'Shape of weight does not match num_embeddings and embedding_dim'
-            for i, fixed in enumerate(self.fix_points):
-                self.register_parameter(
-                    'weight_%d' % i,
-                    Parameter(_weight, requires_grad=not fixed)
-                )
+        
+        for i, fixed in enumerate(self.fix_points):
+            self.register_parameter(
+                'weight_%d' % i,
+                Parameter(torch.Tensor(num_embeddings, embedding_dim), requires_grad=not fixed)
+            )
+        self.reset_parameters()
+#         else:
+#             assert list(_weight.shape) == [num_embeddings, embedding_dim], \
+#                 'Shape of weight does not match num_embeddings and embedding_dim'
+#             for i, fixed in enumerate(self.fix_points):
+#                 self.register_parameter(
+#                     'weight_%d' % i,
+#                     Parameter(_weight, requires_grad=not fixed)
+#                 )
         self.sparse = sparse
 
     def reset_parameters(self):
@@ -544,7 +546,7 @@ class Embedding(CurveModule):
     @weak_script_method
     def forward(self, input, coeffs_t):
         return F.embedding(
-            input, self.compute_weights_t(coeffs_t), self.padding_idx, self.max_norm,
+            input, self.weight_0, self.padding_idx, self.max_norm,
             self.norm_type, self.scale_grad_by_freq, self.sparse)
 
     def extra_repr(self):
@@ -561,7 +563,7 @@ class Embedding(CurveModule):
             s += ', sparse=True'
         return s.format(**self.__dict__)
 
-[docs]    @classmethod
+    @classmethod
     def from_pretrained(cls, embeddings, freeze=True, sparse=False):
         assert embeddings.dim() == 2, \
             'Embeddings parameter is expected to be 2-dimensional'
@@ -598,8 +600,6 @@ class CurveNet(Module):
 
     def import_base_parameters(self, base_model, index):
         parameters = list(self.net.parameters())[index::self.num_bends]
-        from IPython.core.debugger import set_trace
-        set_trace()
         base_parameters = base_model.parameters()
         for parameter, base_parameter in zip(parameters, base_parameters):
             parameter.data.copy_(base_parameter.data)
@@ -621,6 +621,13 @@ class CurveNet(Module):
             for j in range(1, self.num_bends - 1):
                 alpha = j * 1.0 / (self.num_bends - 1)
                 weights[j].data.copy_(alpha * weights[-1].data + (1.0 - alpha) * weights[0].data)
+    def init_quadratic(self):
+        parameters = list(self.net.parameters())
+        for i in range(self.num_bends, len(parameters), self.num_bends):
+            weights = parameters[i:i+self.num_bends]
+            for j in range(1, self.num_bends - 1):
+                alpha = j * 1.0 / (self.num_bends - 1)
+                weights[j].data.copy_((alpha**2) * weights[-1].data + ((1.0 - alpha)**2) * weights[0].data)
 
     def weights(self, t):
         coeffs_t = self.coeff_layer(t)
@@ -634,7 +641,7 @@ class CurveNet(Module):
 
     def forward(self, input, t=None):
         if t is None:
-            t = input.data.new(1).uniform_()
+            t = input.type(torch.cuda.FloatTensor).data.new(1).uniform_()
         coeffs_t = self.coeff_layer(t)
         output = self.net(input, coeffs_t=coeffs_t)
         self._compute_l2()

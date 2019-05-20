@@ -11,7 +11,7 @@ import curves
 import utils
 
 
-parser = argparse.ArgumentParser(description='DNN curve evaluation')
+parser = argparse.ArgumenwtParser(description='DNN curve evaluation')
 parser.add_argument('--dir', type=str, default='/tmp/eval', metavar='DIR',
                     help='training directory (default: /tmp/eval)')
 
